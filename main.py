@@ -50,6 +50,25 @@ def trata_datas(elemento):
     
     elemento['ano_mes'] = "-".join(elemento['data_iniSE'].split('-')[:2])
     return elemento
+    
+def chave_uf(elemento):
+    """
+    Receber um dicionario e ira retornar uma
+    tupla com estado (UF) e o elemento (UF, dicionario)
+    
+    Ex: [0,
+         2015-11-08,
+         0.0,
+         230010,
+         Abaiara,
+         CE,
+         63240-000,
+         -7.3364,
+         -39.0613] -> (CE,[0,2015-11-08,0.0,230010,...])
+    """
+    
+    chave = elemento['uf']
+    return (chave, elemento)
 
 # ***\\\Starting pipeline///*** #
 dengue = (
@@ -66,6 +85,12 @@ dengue = (
         
     | "Cria campo 'ano_mes'"
         >> beam.Map(trata_datas)
+        
+    | "Cria chave pelo estado"
+        >> beam.Map(chave_uf)
+        
+    | "Agrupar pelo estado (UF)"
+        >> beam.GroupByKey()
         
     | "Mostra resultados"
         >> beam.Map(print)   
