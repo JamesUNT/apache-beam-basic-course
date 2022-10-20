@@ -86,7 +86,52 @@ def casos_dengue(elemento):
             yield (f"{uf}-{registro['ano_mes']}", float(registro['casos']))
         else:
             yield (f"{uf}-{registro['ano_mes']}", 0.0)
-
+            
+def chave_uf_ano_mes_de_lista(elemento):
+    """
+    Recebe uma lista de elementos elemento e
+    retorna uma tupla contendo uma chave e o 
+    valor de chuva em mm.
+    
+    Ex: ['2016-01-24','0.0','TO'] -> ('UF_ANO_MES', 0.0)
+    """
+    
+    data, mm, uf = elemento
+    ano_mes = '-'.join(elemento[0].split('-')[:2])
+    chave = f"{uf}-{ano_mes}"
+    
+    if float(mm) < 0:
+        mm = 0.0
+    else:
+        mm = float(mm)
+        
+    return (chave, mm)
+    
+def arredonda(elemento):
+    """
+    Recebe um tupla e retorna um tupla
+    com o valor arredondado
+    
+    Ex: ('RO-2019-04', 950.8000000000028) -> ('RO-2019-04', 950.80)
+    """
+    
+    chave, mm = elemento
+    
+    return (chave, round(mm, 1))
+    
+def filtra_campos_vazios(elemento):
+    """
+    Recebe um tupla e retorna a mesma tupla,
+    porem remove elementos que tenham chaves vazias.
+    """
+    
+    chave, dados = elemento
+    if all([
+        dados['chuva'],
+        dados['dengue']
+    ]):
+        return True
+    return False
 #-----------------------------------------------------------------
 
 # ***\\\Starting pipeline///*** #
@@ -94,7 +139,7 @@ dengue = (
     pipeline
     
     | "Ler do dataset de dengue" 
-        >> ReadFromText("casos_dengue.txt", skip_header_lines=1)
+        >> ReadFromText("sample_casos_dengue.txt", skip_header_lines=1)
         
     | "Transforma de texto para lista" 
         >> beam.Map(texto_para_lista)
@@ -117,9 +162,45 @@ dengue = (
     | "Soma dos casos pela chave"
         >> beam.CombinePerKey(sum)
         
-    | "Mostra resultados"
-        >> beam.Map(print)   
+    # | "Mostra resultados"
+        # >> beam.Map(print)   
 )# --> PCollection
+
+chuvas = (
+    pipeline
+    
+    | "Leitura do dataset de chuvas"
+        >> ReadFromText("sample_chuvas.csv", skip_header_lines=1)
+        
+    | "Transforma de texto(chuvas.csv) para lista" 
+        >> beam.Map(texto_para_lista, delimitador=',')
+        
+    | "Criando chave UF_ANO_MES" 
+        >> beam.Map(chave_uf_ano_mes_de_lista)
+        
+    | "Soma dos casos pela chave UF_ANO_MES"
+        >> beam.CombinePerKey(sum)
+        
+    | "Arrendondar resultados de chuvas" 
+        >> beam.Map(arredonda)
+        
+    # | "Mostra resultados chuvas"
+        # >> beam.Map(print) 
+)# --> PCollection
+
+resultado = (
+    ({'chuva':chuvas, 'dengue':dengue})
+        
+    | "Agrupa PCollections" 
+        >> beam.CoGroupByKey()
+    | "Filtra campos vazios" 
+        >> beam.Filter(filtra_campos_vazios)
+    
+    | "Mostra resultados da unificacao"
+        >> beam.Map(print)
+) # --> PCollection
+
+
 
 pipeline.run()
 
@@ -138,4 +219,10 @@ Anotacoes:
       retornara um elemento processado para cada item contido.
       
       Mais info em: https://beam.apache.org/documentation/transforms/python/elementwise/flatmap/
+      
+    # CoGroupByKey: Funcao que realiza o agrupamento de duas ou
+      mais PCollections atraves de uma chave commum.
+      
+      Mais info em: 
+    
 """
