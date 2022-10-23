@@ -2,6 +2,7 @@
 import re
 import apache_beam as beam
 from apache_beam.io import ReadFromText
+from apache_beam.io.textio import WriteToText
 from apache_beam.options.pipeline_options import PipelineOptions
 
 #Setting options:
@@ -132,6 +133,33 @@ def filtra_campos_vazios(elemento):
     ]):
         return True
     return False
+    
+def descompactar_elementos(elemento):
+    """
+    Recebe uma tupla tupla e retorna uma tupla
+    processada.
+    
+    Ex: (‘CE-2015-11’, {‘chuvas’: [0.4], ‘dengue’: [21.0]})
+        |
+        -> (‘CE-2015-11’, 0.4, 21.0)
+    """
+    
+    chave, dados = elemento
+    chuva = dados['chuva'][0]
+    dengue = dados['dengue'][0]
+    uf,ano,mes = chave.split('-')
+    
+    return (uf, ano, mes, str(chuva), str(dengue))
+    
+def preparar_csv(elemento, delimitador=";"):
+    """
+    Recebe uma tupla e retorna uma string 
+    delimitada.
+    
+    Ex: (‘CE’,2015,01, 85.8,175.0) -> ”CE,2015,01,85.8,175.0”
+    """
+    
+    return f"{delimitador}".join(elemento)
 #-----------------------------------------------------------------
 
 # ***\\\Starting pipeline///*** #
@@ -193,14 +221,24 @@ resultado = (
         
     | "Agrupa PCollections" 
         >> beam.CoGroupByKey()
+        
     | "Filtra campos vazios" 
         >> beam.Filter(filtra_campos_vazios)
-    
-    | "Mostra resultados da unificacao"
-        >> beam.Map(print)
+        
+    | "Descompactar elementos" 
+        >> beam.Map(descompactar_elementos)
+        
+    | "Prepara CSV" 
+        >> beam.Map(preparar_csv)
+        
+    # | "Mostra resultados da unificacao"
+        # >> beam.Map(print)
 ) # --> PCollection
 
+header = 'UF;ANO;MES;CHUVA;DENGUE'
 
+resultado | "Criar arquivo CSV" 
+>> WriteToText('resultado', file_name_suffix=".csv", header=header)
 
 pipeline.run()
 
@@ -223,6 +261,6 @@ Anotacoes:
     # CoGroupByKey: Funcao que realiza o agrupamento de duas ou
       mais PCollections atraves de uma chave commum.
       
-      Mais info em: 
+      Mais info em: https://beam.apache.org/documentation/transforms/python/aggregation/cogroupbykey/
     
 """
